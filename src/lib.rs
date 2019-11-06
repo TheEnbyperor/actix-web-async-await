@@ -1,24 +1,23 @@
-#![feature(await_macro, futures_api, async_await)]
-
-use std::future::Future;
-use tokio_async_await::compat::backward::Compat;
-use futures::Future as Future01;
-use actix_web::{FutureResponse, error::Error};
-
-// Re-export `tokio::await` for ease-of-use
-pub use tokio_async_await::await;
+use futures01::Future;
+use futures::{Future as Future3, FutureExt, TryFutureExt};
 
 macro_rules! define_compat {
     ($name:ident($($arg:ident),+: $($ty:ident),+)) => (
-        #[inline]
-        pub fn $name<F, Fut, Ret, Err, $($ty,)*>(f: F) -> impl Fn($($ty,)*) -> FutureResponse<Ret>
-        where
-            F: Fn($($ty,)*) -> Fut,
-            Fut: Future<Output = Result<Ret, Err>> + 'static,
-            Error: From<Err>,
-        {
-            move |$($arg,)*| Box::new(Compat::new(f($($arg,)*)).from_err())
-        }
+#[inline]
+pub fn $name<'a, F, T, Ok, Error, $($ty,)*>(
+    f: F,
+) -> impl Fn($($ty,)*) -> Box<dyn Future<Item = Ok, Error = Error>> + Clone + 'a
+where
+    Ok: 'static,
+    Error: 'static,
+    F: Fn($($ty,)*) -> T + Clone + 'a,
+    T: Future3<Output = Result<Ok, Error>> + 'static,
+{
+    move |$($arg,)*| {
+        let fut1 = f($($arg,)*).boxed_local().compat();
+        Box::new(fut1)
+    }
+}
     );
 }
 
